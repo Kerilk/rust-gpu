@@ -49,6 +49,33 @@ impl SpirvTarget {
         self.env.spirv_version()
     }
 
+    pub fn target_env(&self) -> TargetEnv {
+        self.env
+    }
+
+    pub fn is_opencl(&self) -> bool {
+        self.memory_model() == MemoryModel::OpenCL
+    }
+
+    pub fn is_opencl_2_0_or_later(&self) -> bool {
+        matches!(
+            self.env,
+            TargetEnv::OpenCL_2_0
+                | TargetEnv::OpenCLEmbedded_2_0
+                | TargetEnv::OpenCL_2_1
+                | TargetEnv::OpenCLEmbedded_2_1
+                | TargetEnv::OpenCL_2_2
+                | TargetEnv::OpenCLEmbedded_2_2
+        )
+    }
+
+    pub fn is_opencl_2_2_or_later(&self) -> bool {
+        matches!(
+            self.env,
+            TargetEnv::OpenCL_2_2 | TargetEnv::OpenCLEmbedded_2_2
+        )
+    }
+
     fn init_target_opts(&self) -> TargetOptions {
         let mut o = TargetOptions::default();
         o.simd_types_indirect = false;
@@ -70,11 +97,17 @@ impl SpirvTarget {
     }
 
     pub fn rustc_target(&self) -> Target {
+        // OpenCL targets use Physical64 addressing with 64-bit pointers.
+        let (pointer_width, data_layout) = if self.memory_model() == MemoryModel::OpenCL {
+            (64, "e-m:e-p:64:64:64-i64:64-n8:16:32:64")
+        } else {
+            (32, "e-m:e-p:32:32:32-i64:64-n8:16:32:64")
+        };
         Target {
             llvm_target: self.to_string().into(),
             metadata: Default::default(),
-            pointer_width: 32,
-            data_layout: "e-m:e-p:32:32:32-i64:64-n8:16:32:64".into(),
+            pointer_width,
+            data_layout: data_layout.into(),
             arch: Arch::Other(ARCH.into()),
             options: self.init_target_opts(),
         }
@@ -104,10 +137,6 @@ impl std::str::FromStr for SpirvTarget {
         }
 
         let result = Self { env, vendor };
-
-        if result.memory_model() == MemoryModel::OpenCL {
-            return Err(error());
-        }
 
         Ok(result)
     }
